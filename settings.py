@@ -1,0 +1,2 @@
+COLORING_INTERVAL = 30
+COLOR_FIELD = 'dl_src'
