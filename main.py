@@ -1,4 +1,4 @@
-"""Main module of ajoaoff/coloring Kytos Network Application.
+"""Main module of amlight/coloring Kytos Network Application.
 
 NApp to color a network topology
 """
@@ -7,14 +7,14 @@ from kytos.core import KytosEvent, KytosNApp, log
 from kytos.core.flow import Flow
 from kytos.core.helpers import listen_to
 from kytos.core.switch import Interface
-from napps.ajoaoff.coloring import settings
+from napps.amlight.coloring import settings
 import requests
 import json
 import struct
 
 
 class Main(KytosNApp):
-    """Main class of ajoaoff/coloring NApp.
+    """Main class of amlight/coloring NApp.
 
     This class is the entry point for this napp.
     """
