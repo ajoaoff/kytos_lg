@@ -73,8 +73,6 @@ class Main(KytosNApp):
                     if r.status_code // 100 != 2:
                         log.error('Flow manager returned an error inserting flow. Status code %s, flow id %s.' %
                                   (r.status_code, flow.id))
-            log.info('Switch %s, flows %s' % (dpid, [f.as_dict() for f in switch_dict['flows']]))
-        log.info('Switches %s' % self.switches)
 
     def shutdown(self):
         """This method is executed when your napp is unloaded.
