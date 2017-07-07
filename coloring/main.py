@@ -129,5 +129,5 @@ class Main(KytosNApp):
         colors = {}
         for dpid, switch_dict in self.switches.items():
             colors[dpid] = {'color_field': settings.COLOR_FIELD,
-                            'color_value': switch_dict['color']}
+                            'color_value': self.color_to_field(switch_dict['color'], settings.COLOR_FIELD)}
         return json.dumps({'colors': colors})
