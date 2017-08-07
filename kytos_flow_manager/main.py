@@ -14,7 +14,7 @@ from pyof.v0x04.controller2switch.flow_mod import FlowMod as FlowMod13
 from pyof.foundation.network_types import Ethernet, IPv4
 import pyof.v0x01.controller2switch.common
 from napps.amlight.sdntrace.shared.switches import Switches
-from napps.amlight.kytos_flow_manager.utils import Flows
+from napps.amlight.kytos_flow_manager.utils import Flows, ACTION_TYPES
 from napps.amlight.sdntrace.shared.extd_nw_types import VLAN, TCP, UDP
 from napps.amlight.kytos_flow_manager import settings
 import json, dill
@@ -81,6 +81,83 @@ class GenericFlow(object):
         self.buffer_id = buffer_id
         self.actions = actions
 
+    def to_dict(self):
+        flow_dict = {}
+        flow_dict['version'] = self.version
+        flow_dict['in_port'] = self.in_port
+        flow_dict['phy_port'] = self.phy_port
+        flow_dict['eth_src'] = self.eth_src
+        flow_dict['eth_dst'] = self.eth_dst
+        flow_dict['eth_type'] = self.eth_type
+        flow_dict['vlan_vid'] = self.vlan_vid
+        flow_dict['vlan_pcp'] = self.vlan_pcp
+        flow_dict['ip_tos'] = self.ip_tos
+        flow_dict['ip_dscp'] = self.ip_dscp
+        flow_dict['ip_ecn'] = self.ip_ecn
+        flow_dict['ip_proto'] = self.ip_proto
+        flow_dict['ipv4_src'] = self.ipv4_src
+        flow_dict['ipv4_dst'] = self.ipv4_dst
+        flow_dict['ipv6_src'] = self.ipv6_src
+        flow_dict['ipv6_dst'] = self.ipv6_dst
+        flow_dict['tcp_src'] = self.tcp_src
+        flow_dict['tcp_dst'] = self.tcp_dst
+        flow_dict['udp_src'] = self.udp_src
+        flow_dict['udp_dst'] = self.udp_dst
+        flow_dict['sctp_src'] = self.sctp_src
+        flow_dict['sctp_dst'] = self.sctp_dst
+        flow_dict['icmpv4_type'] = self.icmpv4_type
+        flow_dict['icmpv4_code'] = self.icmpv4_code
+        flow_dict['arp_op'] = self.arp_op
+        flow_dict['arp_spa'] = self.arp_spa
+        flow_dict['arp_tpa'] = self.arp_tpa
+        flow_dict['arp_sha'] = self.arp_sha
+        flow_dict['arp_tha'] = self.arp_tha
+        flow_dict['ipv6_flabel'] = self.ipv6_flabel
+        flow_dict['icmpv6_type'] = self.icmpv6_type
+        flow_dict['icmpv6_code'] = self.icmpv6_code
+        flow_dict['ipv6_nd_target'] = self.ipv6_nd_target
+        flow_dict['ipv6_nd_sll'] = self.ipv6_nd_sll
+        flow_dict['ipv6_nd_tll'] = self.ipv6_nd_tll
+        flow_dict['mpls_label'] = self.mpls_label
+        flow_dict['mpls_tc'] = self.mpls_tc
+        flow_dict['mpls_bos'] = self.mpls_bos
+        flow_dict['pbb_isid'] = self.pbb_isid
+        flow_dict['tunnel_id'] = self.tunnel_id
+        flow_dict['ipv6_exthdr'] = self.ipv6_exthdr
+        flow_dict['wildcards'] = self.wildcards
+        flow_dict['idle_timeout'] = self.idle_timeout
+        flow_dict['hard_timeout'] = self.hard_timeout
+        flow_dict['priority'] = self.priority
+        flow_dict['table_id'] = self.table_id
+        flow_dict['cookie'] = self.cookie
+        flow_dict['buffer_id'] = self.buffer_id
+        flow_dict['actions'] = []
+        for action in self.actions:
+            action_dict = {}
+            for attr_key, attr_value in action.__dict__.items():
+                action_dict[attr_key] = '%s' % attr_value
+            flow_dict['actions'].append(action_dict)
+
+        return flow_dict
+
+    def to_json(self):
+        return json.dumps(self.to_dict())
+
+    @staticmethod
+    def from_dict(flow_dict):
+        flow = GenericFlow()
+        for attr_name, value in flow_dict.items():
+            if attr_name == 'actions':
+                flow.actions = []
+                for action in value:
+                    new_action = ACTION_TYPES[int(action['action_type'])]()
+                    for action_attr_name, action_attr_value in action.items():
+                        setattr(new_action, action_attr_name, action_attr_value)
+                    flow.actions.append(new_action)
+            else:
+                setattr(flow, attr_name, value)
+        return flow
+
     @classmethod
     def from_flow_stats(cls, flow_stats, version=0x01):
         flow = GenericFlow(version=version)
@@ -143,7 +220,7 @@ class GenericFlow(object):
         if ether_type == constants.IPv4:
             ip_int = int(ipaddress.IPv4Address(ip.source))
             flow_ip_int = int(ipaddress.IPv4Address(self.ipv4_src))
-            if ip_int != 0:
+            if ip_int != 0 or flow_ip_int != 0:
                 mask = (self.wildcards & FlowWildCards.OFPFW_NW_SRC_MASK) >> FlowWildCards.OFPFW_NW_SRC_SHIFT
                 if mask > 32:
                     mask = 32
@@ -153,7 +230,7 @@ class GenericFlow(object):
 
             ip_int = int(ipaddress.IPv4Address(ip.destination))
             flow_ip_int = int(ipaddress.IPv4Address(self.ipv4_dst))
-            if ip_int != 0:
+            if ip_int != 0 or flow_ip_int != 0:
                 mask = (self.wildcards & FlowWildCards.OFPFW_NW_DST_MASK) >> FlowWildCards.OFPFW_NW_DST_SHIFT
                 if mask > 32:
                     mask = 32
@@ -175,9 +252,10 @@ class GenericFlow(object):
             #     if self.tcp_dst != tp.destination:
             #         return False
 
-        for action in self.actions:
-            if action.action_type == ActionType.OFPAT_OUTPUT:
-                return '%s' % action.port.value
+        # for action in self.actions:
+        #     if action.action_type == ActionType.OFPAT_OUTPUT:
+        #         return '%s' % action.port.value
+        return self.to_dict()
 
     def match13(self, ethernet, vlan, ip, tp, in_port):
         pass
@@ -290,3 +368,4 @@ class Main(KytosNApp):
                 i += 1
                 flow = GenericFlow.from_flow_stats(flow_stats)
                 Flows().add_flow(switch.dpid, flow)
+            Flows().sort(switch.dpid)
