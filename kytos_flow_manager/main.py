@@ -29,8 +29,8 @@ class GenericFlow(object):
                  sctp_dst=None, icmpv4_type=None, icmpv4_code=None, arp_op=None, arp_spa=None, arp_tpa=None,
                  arp_sha=None, arp_tha=None, ipv6_flabel=None, icmpv6_type=None, icmpv6_code=None, ipv6_nd_target=None,
                  ipv6_nd_sll=None, ipv6_nd_tll=None, mpls_label=None, mpls_tc=None, mpls_bos=None, pbb_isid=None,
-                 tunnel_id=None, ipv6_exthdr=None, wildcards=None, idle_timeout=0, hard_timeout=0, priority=0,
-                 table_id=0xff, cookie=None, buffer_id=None, actions=None):
+                 tunnel_id=None, ipv6_exthdr=None, wildcards=None, idle_timeout=0, hard_timeout=0, duration_sec=0,
+                 packet_count=0, byte_count=0, priority=0, table_id=0xff, cookie=None, buffer_id=None, actions=None):
         self.version = version
         self.in_port = in_port
         self.phy_port = phy_port
@@ -75,11 +75,18 @@ class GenericFlow(object):
         self.wildcards = wildcards
         self.idle_timeout = idle_timeout
         self.hard_timeout = hard_timeout
+        self.duration_sec = duration_sec
+        self.packet_count = packet_count
+        self.byte_count = byte_count
         self.priority = priority
         self.table_id = table_id
         self.cookie = cookie
         self.buffer_id = buffer_id
         self.actions = actions
+
+    @property
+    def id(self):
+        return self.duration_sec
 
     def to_dict(self):
         flow_dict = {}
@@ -178,86 +185,104 @@ class GenericFlow(object):
             flow.ipv4_dst = flow_stats.match.nw_dst.value
             flow.tcp_src = flow_stats.match.tp_src.value
             flow.tcp_dst = flow_stats.match.tp_dst.value
+            flow.duration_sec = flow_stats.duration_sec.value
+            flow.packet_count = flow_stats.packet_count.value
+            flow.byte_count = flow_stats.byte_count.value
             flow.actions = []
             for action in flow_stats.actions:
                 flow.actions.append(action)
         return flow
 
-    def match(self, ethernet, vlan, ip, tp, in_port=0):
+    def match(self, args):
         if self.version == 0x01:
-            return self.match10(ethernet, vlan, ip, tp, in_port)
+            return self.match10(args)
         elif self.version == 0x04:
-            return self.match13(ethernet, vlan, ip, tp, in_port)
+            return self.match13(args)
 
-    def match10(self, ethernet, vlan, ip, tp, in_port):
+    def match10(self, args):
         log.debug('Matching packet')
         if not self.wildcards & FlowWildCards.OFPFW_IN_PORT:
-            if self.in_port != in_port:
+            if not 'in_port' in args:
+                return False
+            if self.in_port != int(args['in_port']):
                 return False
         if not self.wildcards & FlowWildCards.OFPFW_DL_VLAN_PCP:
-            if not vlan:
+            if not 'vlan_pcp' in args:
                 return False
-            if self.vlan_pcp != vlan.pcp:
+            if self.vlan_pcp != int(args['vlan_pcp']):
                 return False
         if not self.wildcards & FlowWildCards.OFPFW_DL_VLAN:
-            if not vlan:
+            if not 'vlan_vid' in args:
                 return False
-            if self.vlan_vid != vlan.vid:
+            if self.vlan_vid != int(args['vlan_vid']):
                 return False
         if not self.wildcards & FlowWildCards.OFPFW_DL_SRC:
-            if self.eth_src != ethernet.source:
+            if not 'eth_src' in args:
+                return False
+            if self.eth_src != args['eth_src']:
                 return False
         if not self.wildcards & FlowWildCards.OFPFW_DL_DST:
-            if self.eth_dst != ethernet.destination:
+            if not 'eth_dst' in args:
                 return False
-        if vlan:
-            ether_type = vlan.ether_type
-        else:
-            ether_type = ethernet.ether_type
+            if self.eth_dst != args['eth_dst']:
+                return False
+        log.info('I\'m here 5')
         if not self.wildcards & FlowWildCards.OFPFW_DL_TYPE:
-            if self.eth_type != ether_type:
+            if not 'eth_type' in args:
                 return False
-        if ether_type == constants.IPv4:
-            ip_int = int(ipaddress.IPv4Address(ip.source))
+            if self.eth_type != int(args['eth_type']):
+                return False
+        if self.eth_type == constants.IPv4:
             flow_ip_int = int(ipaddress.IPv4Address(self.ipv4_src))
-            if ip_int != 0 or flow_ip_int != 0:
+            if flow_ip_int != 0:
                 mask = (self.wildcards & FlowWildCards.OFPFW_NW_SRC_MASK) >> FlowWildCards.OFPFW_NW_SRC_SHIFT
                 if mask > 32:
                     mask = 32
+                if mask != 32 and not 'ipv4_src' in args:
+                    return False
                 mask = (0xffffffff << mask) & 0xffffffff
+                ip_int = int(ipaddress.IPv4Address(args['ipv4_src']))
                 if ip_int & mask != flow_ip_int & mask:
                     return False
 
-            ip_int = int(ipaddress.IPv4Address(ip.destination))
             flow_ip_int = int(ipaddress.IPv4Address(self.ipv4_dst))
-            if ip_int != 0 or flow_ip_int != 0:
+            if flow_ip_int != 0:
                 mask = (self.wildcards & FlowWildCards.OFPFW_NW_DST_MASK) >> FlowWildCards.OFPFW_NW_DST_SHIFT
                 if mask > 32:
                     mask = 32
+                if mask != 32 and not 'ipv4_dst' in args:
+                    return False
                 mask = (0xffffffff << mask) & 0xffffffff
+                ip_int = int(ipaddress.IPv4Address(args['ipv4_dst']))
                 if ip_int & mask != flow_ip_int & mask:
                     return False
-            #TODO: IPv4 class has no ToS field
-            #if not self.wildcards & FlowWildCards.OFPFW_NW_TOS:
-             #   if self.ip_tos !=
-
-            if not self.wildcards & FlowWildCards.OFPFW_NW_PROTO:
-                if self.ip_proto != ip.protocol:
+            if not self.wildcards & FlowWildCards.OFPFW_NW_TOS:
+                if not 'ip_tos' in args:
                     return False
-            #TODO: tcp and udp do not have fields yet
-            # if not self.wildcards & FlowWildCards.OFPFW_TP_SRC:
-            #     if self.tcp_src != tp.source:
-            #         return False
-            # if not self.wildcards & FlowWildCards.OFPFW_TP_DST:
-            #     if self.tcp_dst != tp.destination:
-            #         return False
+                if self.ip_tos != int(args['ip_tos']):
+                    return False
+            if not self.wildcards & FlowWildCards.OFPFW_NW_PROTO:
+                if not 'ip_proto' in args:
+                    return False
+                if self.ip_proto != int(args['ip_proto']):
+                    return False
+            if not self.wildcards & FlowWildCards.OFPFW_TP_SRC:
+                if not 'tp_src' in args:
+                    return False
+                if self.tcp_src != int(args['tp_src']):
+                    return False
+            if not self.wildcards & FlowWildCards.OFPFW_TP_DST:
+                if not 'tp_dst' in args:
+                    return False
+                if self.tcp_dst != int(args['tp_dst']):
+                    return False
 
         # for action in self.actions:
         #     if action.action_type == ActionType.OFPAT_OUTPUT:
         #         return '%s' % action.port.value
         return self.to_dict()
 
-    def match13(self, ethernet, vlan, ip, tp, in_port):
+    def match13(self, args):
         pass
 
 
@@ -280,10 +305,16 @@ class Main(KytosNApp):
 
     def register_rest(self):
         """Register REST calls
-        GET /flow/match/<dpid> tries to match a packet with a switch (identified by dpid) flows
+        POST /flow/match/<dpid> tries to match a packet with a switch (identified by dpid) flows
+        GET /flows/packet_count/<dpid>?start_date=0&end_date=0
+        GET /flows/byte_count/<dpid>?start_date=0&end_date=0
+        Returns packet or byte counters from start to end date, for each flow in a switch (identified by dpid)
         """
         endpoints = [
-            ('/flow/match/<dpid>', self.match_flows, ['POST'])
+            ('/flow/match/<dpid>', self.flow_match, ['GET']),
+            ('/flow/stats/<dpid>', self.flow_stats, ['GET']),
+            ('/flow/packet_count/<dpid>', self.packet_count, ['GET']),
+            ('/flow/byte_count/<dpid>', self.byte_count, ['GET']),
         ]
 
         for endpoint in endpoints:
@@ -306,19 +337,57 @@ class Main(KytosNApp):
         """
         pass
 
-    def match_flows(self, dpid):
-        json_content = request.get_json()
-        in_port = json_content['in_port']
-        pkt = bytes(json_content['packet'])
+    def flow_match(self, dpid):
+        return self.match_flows(dpid, False)
 
-        ethernet, vlan, ip, tp = self.break_packet(pkt)
+    def flow_stats(self, dpid):
+        return self.match_flows(dpid, True)
+
+    def match_flows(self, dpid, many=True):
+        """
+        Tries to match the packet in request against the flows installed in switch with given dpid.
+        Tries the match with each flow, in other. If many is True, tries the match with all flows, if False,
+        tries until the first match.
+        :param dpid: DPID of the switch
+        :param many: Boolean, indicating whether to continue after matching the first flow or not
+        :return: If many, the list of matched flows, or the matched flow
+        """
+        args = request.args
+
         flows = Flows().get_flows(dpid)
-        m = False
+        response = []
         for flow in flows:
-            m = flow.match(ethernet, vlan, ip, tp, in_port)
+            m = flow.match(args)
             if m:
-                break
-        return json.dumps({'response': m}), 200
+                if many:
+                    response.append(m)
+                else:
+                    response = m
+                    break
+        return json.dumps({'response': response}), 200
+
+    def packet_count(self, dpid):
+        return self.count('packet_count', dpid)
+
+    def byte_count(self, dpid):
+        return self.count('byte_count', dpid)
+
+    def count(self, field, dpid):
+        start_date = request.args.get('start_date', 0)
+        end_date = request.args.get('end_date', 0)
+
+        count_flows = []
+        # We don't have statistics persistence yet, so for now this only works for start and end equals to zero
+        flows = Flows().get_flows(dpid)
+
+        for flow in flows:
+            count = getattr(flow, field)
+            count_flows.append({'flow_id': flow.id,
+                                field: count,
+                                '%s_rate' % field: count/flow.duration_sec})
+
+        return json.dumps(count_flows)
+
 
     @staticmethod
     def break_packet(pkt):
